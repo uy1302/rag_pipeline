@@ -3,6 +3,7 @@ import pandas as pd
 import psycopg2
 from transformers import AutoTokenizer
 
+
 class TextEmbedder:
     def __init__(self, api_url, db_config, model_name="bert-base-uncased"):
         self.api_url = api_url
@@ -65,6 +66,7 @@ class TextEmbedder:
                 )
             self.conn.commit()
         print(f"Data ingested successfully into table {table_name}.")
+        
     def query_most_similar(self, input_text, table_name, top_k=1):
         embedding = self.get_embedding(input_text)  # Get embedding for the input text
         with self.conn.cursor() as cur:
@@ -99,7 +101,7 @@ if __name__ == "__main__":
 
 
     embedder = TextEmbedder(API_URL, DB_CONFIG)
-    embedder.ingest_to_db(df, TABLE_NAME, VECTOR_DIMENSION)
+    # embedder.ingest_to_db(df, TABLE_NAME, VECTOR_DIMENSION)
 
     input_text = input()
     results = embedder.query_most_similar(input_text, TABLE_NAME, top_k=10)
