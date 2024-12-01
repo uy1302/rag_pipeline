@@ -17,9 +17,9 @@ class TextEmbedder:
             headers={"Content-Type": "application/json"}
         )
         if response.status_code == 200:
-            embeddings = response.json()  # API typically returns an array of embeddings
+            embeddings = response.json()  
             if len(embeddings) > 0:
-                return embeddings[0]  # Extract the embedding vector for the input text
+                return embeddings[0]  
         raise ValueError(f"Failed to get embedding: {response.text}")
 
     def chunk_text(self, text, max_tokens=512):
@@ -67,17 +67,35 @@ class TextEmbedder:
             self.conn.commit()
         print(f"Data ingested successfully into table {table_name}.")
         
-    def query_most_similar(self, input_text, table_name, top_k=1):
-        embedding = self.get_embedding(input_text)  # Get embedding for the input text
+    def query_hybrid_search(self, input_text, table_name, top_k=1, keyword=None):
+        embedding = self.get_embedding(input_text)  # Generate embedding for the input text
         with self.conn.cursor() as cur:
-            cur.execute(f"""
-            SELECT title, embedding <-> %s::VECTOR AS similarity
-            FROM {table_name}
-            ORDER BY similarity ASC
-            LIMIT %s
-            """, (embedding, top_k))
+            if keyword:
+                # Query for hybrid search: combines keyword filtering with vector similarity
+                cur.execute(f"""
+                SELECT title, 
+                    embedding <-> %s::VECTOR AS similarity,
+                    CASE 
+                        WHEN title ILIKE %s THEN 0.1  
+                        ELSE embedding <-> %s::VECTOR 
+                    END AS hybrid_score
+                FROM {table_name}
+                WHERE title ILIKE %s 
+                ORDER BY hybrid_score ASC
+                LIMIT %s
+                """, (embedding, f"%{keyword}%", embedding, f"%{keyword}%", top_k))
+            else:
+                # Default to vector search only if no keyword is provided
+                cur.execute(f"""
+                SELECT title, embedding <-> %s::VECTOR AS similarity
+                FROM {table_name}
+                ORDER BY similarity ASC
+                LIMIT %s
+                """, (embedding, top_k))
+
             results = cur.fetchall()
         return results
+
 
 
 if __name__ == "__main__":
@@ -104,7 +122,7 @@ if __name__ == "__main__":
     # embedder.ingest_to_db(df, TABLE_NAME, VECTOR_DIMENSION)
 
     input_text = input()
-    results = embedder.query_most_similar(input_text, TABLE_NAME, top_k=10)
+    results = embedder.query_hybrid_search(input_text, TABLE_NAME, top_k=10, keyword=input())
 
     for result in results:
         print(f"Title: {result[0]}, Similarity: {result[1]}")
